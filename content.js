@@ -152,7 +152,23 @@ function appendToTable(job) {
   document.querySelector("#indeed-crawler-table tbody").appendChild(row);
 }
 
-//<td style="font-weight:bold; color: #2557a7;">${job.applyMethod || "N/A"}</td>
+function waitForNewPage(previousFirstJob, timeout = 15000) {
+  return new Promise((resolve, reject) => {
+    const start = Date.now();
+    const interval = setInterval(() => {
+      const currentFirstJob = document.querySelector("h2.jobTitle")?.innerText;
+      if (currentFirstJob && currentFirstJob !== previousFirstJob) {
+        clearInterval(interval);
+        log("Đã chuyển trang mới:", currentFirstJob);
+        resolve();
+      } else if (Date.now() - start > timeout) {
+        clearInterval(interval);
+        reject("Timeout đợi chuyển trang");
+      }
+    }, 500);
+  })
+}
+
 
 async function startCrawl() {
   if (isCrawling) return;
@@ -165,9 +181,11 @@ async function startCrawl() {
 
 async function crawlLoop() {
   log("Crawl loop bắt đầu tại trang", currentPage);
-  const success = await crawlPage();
-  if (!success && isCrawling) {
-    updateStatus("Chuyển trang, sẽ tiếp tục sau reload...");
+  // Actually loop unlike before
+  while (isCrawling) {
+    const success = await crawlPage();
+    if (!success) break; // Nếu crawlPage trả về false, dừng loop
+    updateStatus(`Đã crawl xong trang ${currentPage}. Đang chuẩn bị chuyển trang...`);
   }
 }
 
@@ -188,109 +206,7 @@ async function waitForJobCards(timeout = 15000) {
   });
 }
 
-// async function crawlPage() {
-//   try {
-//     updateStatus(`Đang crawl trang ${currentPage}...`);
-//     const jobCards = await waitForJobCards();
 
-//     for (let i = 0; i < jobCards.length; i++) {
-//       if (!isCrawling) return false;
-
-//       const card = jobCards[i];
-//       card.scrollIntoView({ behavior: 'smooth' });
-//       await wait(500);
-
-//       const titleLink = card.querySelector("h2.jobTitle a");
-
-//       let jobKey = null;
-//       if (titleLink?.href) {
-//         const match = titleLink.href.match(/jk=([^&]+)/);
-//         if (match) jobKey = match[1];
-//       }
-      
-//       if (!jobKey) {
-//         log('Bỏ qua card không có jobKey hợp lệ.');
-//         continue;
-//       }
-
-//       const jobTitle = titleLink?.innerText?.trim() || "N/A";
-//       const jobCompany = (
-//         card.querySelector(".companyName") ||
-//         card.querySelector("[data-testid='company-name']") ||
-//         card.querySelector("span.companyName")
-//       )?.innerText?.trim() || "N/A";
-//       const jobLocation = (
-//         card.querySelector(".companyLocation") ||
-//         card.querySelector("[data-testid='text-location']")
-//       )?.innerText?.trim() || "N/A";
-
-//       const fingerprint = (jobCompany + jobTitle + jobLocation).toLowerCase().replace(/\s/g, '');
-
-//       if (allJobs.some(job => job.fingerprint === fingerprint)) {
-//         log(`Bỏ qua job trùng lặp nội dung (fingerprint): ${jobTitle}`);
-//         continue;
-//       }
-
-//       let salary =
-//         card.querySelector(".salary-snippet")?.innerText?.trim() ||
-//         card.querySelector("span[data-testid='salary-snippet']")?.innerText?.trim() ||
-//         "N/A";
-
-//       if (salary === "N/A") { 
-//         salary = await fetchJobDetail(jobKey);
-//       }      
-
-//       const job = {
-//         key: jobKey,
-//         fingerprint: fingerprint,
-//         title: jobTitle,
-//         company: jobCompany,
-//         location: jobLocation,
-//         salary,
-//         link: titleLink ? titleLink.href : "N/A",
-//         page: currentPage
-//       };
-
-//       allJobs.push(job);
-//       appendToTable(job);
-//       chrome.storage.local.set({ allJobs });
-//     }
-
-//     if (currentPage >= maxPages) {
-//       updateStatus("Đã đạt giới hạn số trang.");
-//       if (!hasExported) {
-//         exportCSV();
-//         hasExported = true;
-//       }
-//       isCrawling = false;
-//       chrome.storage.local.set({ isCrawling: false });
-//       return false;
-//     }
-
-//     const nextBtn = document.querySelector("a[aria-label='Next'], a[aria-label='Next Page'], a[data-testid='pagination-page-next']");
-
-//     if (nextBtn && !nextBtn.hasAttribute("aria-disabled")) {
-//       currentPage++;
-//       chrome.storage.local.set({ currentPage, allJobs, isCrawling, maxPages });
-//       nextBtn.scrollIntoView();
-//       nextBtn.click();
-//       return false;
-//     } else {
-//       updateStatus("Hoàn tất crawl tất cả trang.");
-//       if (!hasExported) {
-//         exportCSV();
-//         hasExported = true;
-//       }
-//       isCrawling = false;
-//       chrome.storage.local.set({ isCrawling: false });
-//       return false;
-//     }
-//   } catch (err) {
-//     console.error("Lỗi crawl page:", err);
-//     updateStatus("Lỗi crawl: " + err);
-//     return false;
-//   }
-// }
 async function crawlPage() {
   try {
     updateStatus(`Đang crawl trang ${currentPage}...`);
@@ -303,6 +219,11 @@ async function crawlPage() {
       card.scrollIntoView({ behavior: 'smooth', block: 'center' });
       // Đợi ngẫu nhiên từ 1.2 đến 3.5 giây trước khi xử lý job card tiếp theo
       await randomDelay();
+
+      if (Math.random() < 0.2) {
+        log("🤔 Stretching JUUUUST a bit...");
+        await randomDelay(3000, 6000);
+      }
 
       const titleLink = card.querySelector("h2.jobTitle a");
       if (!titleLink) continue;
@@ -321,13 +242,28 @@ async function crawlPage() {
 
       // XỬ LÝ LƯƠNG
       let salary = getSalaryFromCard(card);
-      let applyMethod = "N/A";
+      let applyMethod = "Unknown";
 
-      if (!salary || salary === "N/A" || applyMethod === "N/A") {
-        updateStatus(`Đang quét Description cho: ${jobTitle.substring(0, 15)}...`);
-        const detail = await fetchJobDetail(jobKey, jobTitle || {});
-        salary = salary === "N/A" ? (detail.salary || "N/A") : salary;
-        applyMethod = detail.applyMethod;;
+      // Nếu dễ dàng apply, apply method có thể là Apply now with Indeed, còn nếu không thì chưa rõ
+
+      if (easilyApply === "Yes") {
+        applyMethod = "Apply Now With Indeed";
+      }
+
+      const needsSalary = salary === "N/A";
+      const needsApply = applyMethod === "Unknown";
+
+      const shouldFetchDetail = (needsSalary && Math.random() < 0.7) || (needsApply && Math.random() < 0.3); // Nếu cần lương hoặc phương thức apply và xác suất 70%
+      if (shouldFetchDetail) {
+        await randomDelay(2000, 5000); // Đợi thêm trước khi fetch detail để tránh bị nghi ngờ
+        const detail = await fetchJobDetail(jobKey, jobTitle) || {};
+        if (needsSalary && detail.salary) {
+          salary = detail.salary;
+        }
+
+        if (needsApply && detail.applyMethod && detail.applyMethod !== "N/A") {
+          applyMethod = detail.applyMethod;
+        }
       }
 
       const job = {
@@ -348,22 +284,36 @@ async function crawlPage() {
       chrome.storage.local.set({ allJobs });
     }
 
-    // Chuyển trang
-    if (currentPage >= maxPages) {
-      finishCrawl("Đã đạt giới hạn trang.");
-      return false;
-    }
-
     const nextBtn = document.querySelector('a[data-testid="pagination-page-next"], a[aria-label="Next Page"]');
-    if (nextBtn) {
+    if (nextBtn && currentPage < maxPages) {
       currentPage++;
       chrome.storage.local.set({ currentPage, allJobs, isCrawling, maxPages });
+
+      nextBtn.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      const prevFirstJob = document.querySelector("h2.jobTitle")?.innerText;
+
       nextBtn.click();
+
+      try {
+        await waitForNewPage(prevFirstJob);
+        await waitForJobCards();
+        await randomDelay(2000, 5000);
+
+        return true;
+      } catch (err) {
+        log("Không thể chuyển trang mới:", err);
+        finishCrawl("Không thể chuyển trang mới.");
+        return false;
+      }
     } else {
       finishCrawl("Hết trang.");
+      return false;
     }
   } catch (err) {
     updateStatus("Lỗi: " + err.message);
+    log("Lỗi crawl page:", err);
+    finishCrawl("Lỗi xảy ra.");
+    return false;
   }
 }
 
