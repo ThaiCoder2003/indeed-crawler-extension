@@ -10,6 +10,13 @@ function wait(ms) {
   return new Promise(resolve => setTimeout(resolve, ms));
 }
 
+function randomDelay(min = 1200, max = 3500) {
+  return new Promise(resolve => {
+    const time = min + Math.random() * (max - min);
+    setTimeout(resolve, time);
+  });
+}
+
 function log(...args) {
   console.log("[Indeed Crawler]", ...args);
 }
@@ -294,7 +301,8 @@ async function crawlPage() {
 
       const card = jobCards[i];
       card.scrollIntoView({ behavior: 'smooth', block: 'center' });
-      await wait(1000); // Đợi UI ổn định
+      // Đợi ngẫu nhiên từ 1.2 đến 3.5 giây trước khi xử lý job card tiếp theo
+      await randomDelay();
 
       const titleLink = card.querySelector("h2.jobTitle a");
       if (!titleLink) continue;
@@ -317,8 +325,8 @@ async function crawlPage() {
 
       if (!salary || salary === "N/A" || applyMethod === "N/A") {
         updateStatus(`Đang quét Description cho: ${jobTitle.substring(0, 15)}...`);
-        const detail = await fetchJobDetail(jobKey, jobTitle);
-        if (salary === "N/A") salary = detail.salary;
+        const detail = await fetchJobDetail(jobKey, jobTitle || {});
+        salary = salary === "N/A" ? (detail.salary || "N/A") : salary;
         applyMethod = detail.applyMethod;;
       }
 
@@ -372,6 +380,13 @@ function localizeApplyMethod(methodText) {
   return methodText;
 }
 
+function randomDelay(min = 1200, max = 3500) {
+  return new Promise(resolve => {
+    const time = min + Math.random() * (max - min);
+    setTimeout(resolve, time);
+  });
+}
+
 function finishCrawl(reason) {
   updateStatus(reason);
   if (!hasExported) {
@@ -389,7 +404,7 @@ async function fetchJobDetail(jobKey, jobTitle) {
       chrome.runtime.sendMessage({ action: "fetchJobHTML", url }, resolve);
     });
 
-    if (!response || !response.success) return "N/A";
+    if (!response || !response.success) return {salary: "N/A", applyMethod: "N/A"};
 
     const doc = new DOMParser().parseFromString(response.html, "text/html");
     const fullDescEl = doc.querySelector("#jobDescriptionText");
