@@ -296,6 +296,7 @@ async function crawlPage() {
 
       try {
         await waitForNewPage(prevFirstJob);
+        await randomDelay(1000, 2000);
         await waitForJobCards();
         await randomDelay(2000, 5000);
 
@@ -421,35 +422,6 @@ async function fetchJobDetail(jobKey, jobTitle) {
     return { salary: "N/A", applyMethod: "N/A" };
   }
 }
-// async function fetchJobDetail(jobKey) {
-//   try {
-//     const url = `https://www.indeed.com/m/basecamp/viewjob?viewtype=embedded&jk=${jobKey}`;
-//     const res = await fetch(url);
-//     const html = await res.text();
-//     const doc = new DOMParser().parseFromString(html, "text/html");
-
-//     // Danh sách các selectors có thể chứa thông tin lương
-//     const salarySelectors = [
-//       "#salaryInfoAndJobType span",
-//       "[data-testid='detailSalary']",
-//       "div.salary-snippet-container",
-//       // Thêm các selectors khác bạn tìm thấy ở đây
-//     ];
-
-//     for (const selector of salarySelectors) {
-//       const element = doc.querySelector(selector);
-//       if (element && element.innerText.trim()) {
-//         return element.innerText.trim(); // Trả về kết quả đầu tiên tìm thấy
-//       }
-//     }
-
-//     return "N/A"; // Trả về N/A nếu không tìm thấy ở bất kỳ selector nào
-//   } catch (err) {
-//     console.warn("Không lấy được detail cho jobKey:", jobKey, err);
-//     return "N/A";
-//   }
-// }
-
 function exportCSV() {
   log("Bắt đầu xuất file CSV với", allJobs.length, "job");
   const headers = ["CompanyName", "Job Title", "Link", "Salary", "Location", "Page", "Easily Apply"];
