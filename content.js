@@ -234,8 +234,11 @@ async function crawlPage() {
       const jobCompany = (card.querySelector("[data-testid='company-name']") || card.querySelector(".companyName"))?.innerText.trim() || "N/A";
       const jobLocation = (card.querySelector("[data-testid='text-location']") || card.querySelector(".companyLocation"))?.innerText.trim() || "N/A";
 
-      const metaSection = card.querySelector('[class*="mosaic-provider-jobcards"]');
-      const easilyApply = metaSection && metaSection.innerText.includes("Easily apply") ? "Yes" : "No";
+      const easilyApply = card.querySelector('[data-testid="indeedApply"]') ||
+                          card.innerText.toLowerCase().includes("nộp đơn dễ dàng")
+        ? "Yes"
+        : "No";
+
 
       const fingerprint = (jobCompany + jobTitle + jobLocation).toLowerCase().replace(/\s/g, '');
       if (allJobs.some(job => job.fingerprint === fingerprint)) continue;
